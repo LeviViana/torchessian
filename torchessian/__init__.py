@@ -28,3 +28,54 @@ def hessian_matmul(model, loss_function, v, batch):
     model.zero_grad()
     
     return (grad_w_delta - grad_w) / r
+
+
+def lanczos(model, loss_function, batch, m):
+    global H
+    n = sum(p.data.numel() for p in model.parameters())
+    v = torch.ones(n)
+    v /= torch.norm(v)
+    w = hessian_matmul(model, loss_function, v, batch)
+    alpha = []
+    alpha.append(w.dot(v))
+    w -= alpha[0] * v
+    
+    V = [v]
+    beta = []
+    
+    for i in range(1, m):
+        b = torch.norm(w)
+        beta.append(b)
+        if b > 0:
+            v = w / b
+        else:
+            done = False
+            k = 0
+            while not done:
+                k += 1
+                v = torch.rand(n)
+                
+                for v_ in V:
+                    v -= v.dot(v_) * v_
+                
+                done = torch.norm(n) > 0
+                if k > n * 10:
+                    raise Exception("Can't find orthogonal vector")
+                            
+        for v_ in V:
+            v -= v.dot(v_) * v_
+        
+        v /= torch.norm(v)
+               
+        V.append(v)
+        w = hessian_matmul(model, loss_function, v, batch)
+        alpha.append(w.dot(v))
+        w = w - alpha[-1] * V[-1] - beta[-1] * V[-2]
+
+    T = torch.diag(torch.Tensor(alpha))
+    for i in range(m - 1):
+        T[i, i + 1] = beta[i] 
+        T[i + 1, i] = beta[i]
+
+    V = torch.cat(list(v.unsqueeze(0) for v in V), 0)
+    return T, V
