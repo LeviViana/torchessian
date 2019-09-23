@@ -35,9 +35,9 @@ def hessian_matmul(model, loss_function, v, batch):
     return (grad_w_delta - grad_w) / EPS
 
 
-def lanczos(model, loss_function, batch, m):
+def lanczos(model, loss_function, batch, m, buffer=2):
     n = sum(p.data.numel() for p in model.parameters())
-    v = torch.ones(n)
+    v = torch.ones(n).to(batch[0].device)
     v /= torch.norm(v)
     w = hessian_matmul(model, loss_function, v, batch)
     alpha = []
@@ -57,9 +57,10 @@ def lanczos(model, loss_function, batch, m):
             k = 0
             while not done:
                 k += 1
-                v = torch.rand(n)
+                v = torch.rand(n).to(w.device)
                 
                 for v_ in V:
+                    v_ = v_.to(v.device)
                     v -= v.dot(v_) * v_
                 
                 done = torch.norm(n) > 0
@@ -67,11 +68,16 @@ def lanczos(model, loss_function, batch, m):
                     raise Exception("Can't find orthogonal vector")
                             
         for v_ in V:
+            v_ = v_.to(v.device)
             v -= v.dot(v_) * v_
         
         v /= torch.norm(v)
-               
+        
         V.append(v)
+        
+        if len(V) > buffer:
+            V[-buffer - 1] = V[-buffer - 1].cpu()
+   
         w = hessian_matmul(model, loss_function, v, batch)
         alpha.append(w.dot(v))
         w = w - alpha[-1] * V[-1] - beta[-1] * V[-2]
@@ -81,15 +87,16 @@ def lanczos(model, loss_function, batch, m):
         T[i, i + 1] = beta[i] 
         T[i + 1, i] = beta[i]
 
-    V = torch.cat(list(v.unsqueeze(0) for v in V), 0)
+    V = torch.cat(list(v.cpu().unsqueeze(0) for v in V), 0)
     return T, V
 
 
-def gauss_quadrature(model, loss_function, batch, m):
-    T, _ = lanczos(model, loss_function, batch, m)
+def gauss_quadrature(model, loss_function, batch, m, buffer=2):
+    T, _ = lanczos(model, loss_function, batch, m, buffer)
     D, U = torch.eig(T, eigenvectors=True)
     L = D[:, 0] # All eingenvalues are real anyway
     W = torch.Tensor(list(U[0, i] ** 2 for i in range(m)))
+    print(L)
     return L, W
 
 
@@ -106,8 +113,8 @@ def F(x, L, W, m):
     return result
 
 
-def spectrum(model, loss_function, batch, m, x_min=-100, x_max=100):
-    L, W = gauss_quadrature(model, loss_function, batch, m)
-    support = torch.linspace(x_min, x_max, 1000)
+def spectrum(model, loss_function, batch, m, x_min=-100, x_max=100, buffer=2):
+    L, W = gauss_quadrature(model, loss_function, batch, m, buffer)
+    support = torch.linspace(x_min, x_max, 10000)
     density = F(support, L, W, m)
     return support, density
