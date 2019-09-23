@@ -25,8 +25,6 @@ def hessian_matmul(model, loss_function, v, batch):
     grad_w.squeeze_()
     grad_w_delta.squeeze_()
     
+    model.zero_grad()
+    
     return (grad_w_delta - grad_w) / r
-
-
-def lanczos():
-    return
