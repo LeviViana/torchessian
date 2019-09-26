@@ -31,12 +31,16 @@ def hessian_matmul(model, loss_function, v, batch):
     grad_w_delta.squeeze_()
     
     model.zero_grad()
-    
+
     return (grad_w_delta - grad_w) / EPS
 
 
 def lanczos(model, loss_function, batch, m, buffer=2):
     n = sum(p.data.numel() for p in model.parameters())
+    
+    assert n >= m
+    assert buffer >= 2
+    
     v = torch.ones(n).to(batch[0].device)
     v /= torch.norm(v)
     w = hessian_matmul(model, loss_function, v, batch)
@@ -64,7 +68,7 @@ def lanczos(model, loss_function, batch, m, buffer=2):
                     v -= v.dot(v_) * v_
                 
                 done = torch.norm(n) > 0
-                if k > n * 10:
+                if k > 2 and not done: # This shouldn't happen even twice 
                     raise Exception("Can't find orthogonal vector")
                             
         for v_ in V:
@@ -96,7 +100,10 @@ def gauss_quadrature(model, loss_function, batch, m, buffer=2):
     D, U = torch.eig(T, eigenvectors=True)
     L = D[:, 0] # All eingenvalues are real anyway
     W = torch.Tensor(list(U[0, i] ** 2 for i in range(m)))
-    print(L)
+    eigenvalues = list(x.item()/x.abs().item() * x.abs().log() for x in L.sort()[0])
+    for i in range(10):
+        lim = min(len(eigenvalues) + 1, i * 10 + 10)
+        print(' | '.join('%0.2f' % (v) for v in eigenvalues[i * 10:lim]))
     return L, W
 
 
