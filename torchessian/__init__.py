@@ -3,40 +3,26 @@ from copy import deepcopy
 import math
 
 SIG = 0.001
-EPS = 0.001
 
 def hessian_matmul(model, loss_function, v, batch):
-    global EPS
     
     model.zero_grad()
-    model_delta = deepcopy(model)
-    begin = end = 0
-    for p in model_delta.parameters():
-        end = begin + p.data.numel()
-        p_flat = p.data.view(-1)        
-        p_flat += EPS * v[begin:end]
-        begin = end
     
     x, y = batch
     E = loss_function(model(x), y)
-    E_delta = loss_function(model_delta(x), y)
+    v.requires_grad = False
     
-    E.backward()
-    E_delta.backward()
-    
-    grad_w = torch.cat(list(p.grad.view(1, -1) for p in model.parameters()), 1)
-    grad_w_delta = torch.cat(list(p.grad.view(1, -1) for p in model_delta.parameters()), 1)
-    
-    grad_w.squeeze_()
-    grad_w_delta.squeeze_()
-    
-    model.zero_grad()
+    grad_result = torch.autograd.grad(E, (p for p in model.parameters() if p.requires_grad), create_graph=True)
+    grad_result = torch.cat(tuple(p.view(1, -1) for p in grad_result), 1)
+    grad_result.backward(v.view(1, -1))
 
-    return (grad_w_delta - grad_w) / EPS
+    result = torch.cat(tuple(p.grad.view(1, -1) for p in model.parameters() if p.requires_grad), 1)
+    
+    return result.squeeze(0)
 
 
 def lanczos(model, loss_function, batch, m, buffer=2):
-    n = sum(p.data.numel() for p in model.parameters())
+    n = sum(p.data.numel() if p.requires_grad else 0 for p in model.parameters())
     
     assert n >= m
     assert buffer >= 2
@@ -100,10 +86,19 @@ def gauss_quadrature(model, loss_function, batch, m, buffer=2):
     D, U = torch.eig(T, eigenvectors=True)
     L = D[:, 0] # All eingenvalues are real anyway
     W = torch.Tensor(list(U[0, i] ** 2 for i in range(m)))
-    eigenvalues = list(x.item()/x.abs().item() * x.abs().log() for x in L.sort()[0])
+    eigenvalues, indices = L.sort()
+    eigenvalues = eigenvalues.tolist()
+    print("eigenvalues")
     for i in range(10):
         lim = min(len(eigenvalues) + 1, i * 10 + 10)
         print(' | '.join('%0.2f' % (v) for v in eigenvalues[i * 10:lim]))
+    
+    print("weights")
+    weights = W[indices].tolist()
+    for i in range(10):
+        lim = min(len(weights) + 1, i * 10 + 10)
+        print(' | '.join('%0.6f' % (w * 10 ** 4) for w in weights[i * 10:lim]))
+    
     return L, W
 
 

@@ -145,9 +145,18 @@ class Net(nn.Module):
 net = resnet18(pretrained=True)
 net.fc = nn.Linear(512, 10)
 
-net = net.cuda()
+for p in net.conv1.parameters():
+    p.requires_grad = False
 
-#net = Net()
+for p in net.bn1.parameters():
+    p.requires_grad = False
+
+for p in net.layer1.parameters():
+    p.requires_grad = False
+
+# net = Net()
+
+net = net.cuda()
 
 ########################################################################
 # 3. Define a Loss function and optimizer
@@ -158,6 +167,7 @@ import torch.optim as optim
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+scheduler = optim.lr_scheduler.StepLR(optimizer, 10, gamma=0.5)
 
 ########################################################################
 # 4. Train the network
@@ -170,7 +180,7 @@ optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 m = 100
 
 s, d = [], []
-for epoch in range(20):  # loop over the dataset multiple times    
+for epoch in range(30):  # loop over the dataset multiple times    
 
     running_loss = 0.0
     for i, data in enumerate(trainloader, 0):
@@ -199,6 +209,9 @@ for epoch in range(20):  # loop over the dataset multiple times
     d.append(density)
     
 print('Finished Training')
+
+net = net.cpu()
+net.eval()
 
 ########################################################################
 # 5. Test the network on the test data
