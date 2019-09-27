@@ -53,7 +53,7 @@ def lanczos(model, loss_function, batch, m, buffer=2):
                     v_ = v_.to(v.device)
                     v -= v.dot(v_) * v_
                 
-                done = torch.norm(n) > 0
+                done = torch.norm(v) > 0
                 if k > 2 and not done: # This shouldn't happen even twice 
                     raise Exception("Can't find orthogonal vector")
                             
@@ -87,18 +87,7 @@ def gauss_quadrature(model, loss_function, batch, m, buffer=2):
     L = D[:, 0] # All eingenvalues are real anyway
     W = torch.Tensor(list(U[0, i] ** 2 for i in range(m)))
     eigenvalues, indices = L.sort()
-    eigenvalues = eigenvalues.tolist()
-    print("eigenvalues")
-    for i in range(10):
-        lim = min(len(eigenvalues) + 1, i * 10 + 10)
-        print(' | '.join('%0.2f' % (v) for v in eigenvalues[i * 10:lim]))
-    
-    print("weights")
-    weights = W[indices].tolist()
-    for i in range(10):
-        lim = min(len(weights) + 1, i * 10 + 10)
-        print(' | '.join('%0.6f' % (w * 10 ** 4) for w in weights[i * 10:lim]))
-    
+    eigenvalues = eigenvalues.tolist()    
     return L, W
 
 
@@ -115,7 +104,7 @@ def F(x, L, W, m):
     return result
 
 
-def spectrum(model, loss_function, batch, m, x_min=-100, x_max=100, buffer=2):
+def spectrum(model, loss_function, batch, m, x_min=-50, x_max=50, buffer=2):
     L, W = gauss_quadrature(model, loss_function, batch, m, buffer)
     support = torch.linspace(x_min, x_max, 10000)
     density = F(support, L, W, m)
