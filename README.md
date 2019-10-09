@@ -8,7 +8,7 @@ I found [this article](https://arxiv.org/pdf/1901.10159.pdf) very interesting, a
 
 For instance, when analyzing the impact of having batchnom layers in a ResNet-18 architecture, I found the following spectrum on the test set of CIFAR-10:
 
-**Note**: both architectures (i.e. with and without batchnorm) were trained until reaching a global optimum, i.e. at least 98% of accuracy.
+**Note**: both architectures (i.e. with and without batchnorm) were trained until almost reaching a global optimum, i.e. at least 98% of accuracy.
 
 ## Spectrum of a single batch 
 ![alt text](https://wintics-email-logo.s3.eu-west-3.amazonaws.com/batch_mode.png)
