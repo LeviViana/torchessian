@@ -1,7 +1,26 @@
 import torch
+import tqdm
 from . import hessian_matmul
 
 def lanczos(model, loss_function, dataloader, m, buffer=2):
+    """
+        This in an implementation of the Lanczos Algorithm as stated in
+        https://en.wikipedia.org/wiki/Lanczos_algorithm.
+        Inputs:
+            model: a torch.nn.Module with some parameters having requires_grad
+                set True.
+            loss_function: the loss the neural net is optimizing, and for which
+                the hessian spectrum will be calculated.
+            dataloader: a torch dataloader for which the spectrum will be
+                estimated.
+            m: the number of iterations of the Lanczos Algorithm.
+            buffer: the number of base vectors you wish to keep in GPU memory,
+                if ever you are using GPU. Set buffer to 2 if you are having
+                OOM errors.
+        Outputs:
+            T: the tridiagonal matrix of the Lanczos Algorithm.
+            V : the orthonormal basis of the Lanczos Algorithm.
+    """
     n = sum(p.data.numel() for p in model.parameters() if p.requires_grad)
 
     assert n >= m
@@ -12,15 +31,14 @@ def lanczos(model, loss_function, dataloader, m, buffer=2):
     
     w = torch.zeros_like(v)
     
-    print("[LANCZOS iter 0] batch")
+    print("[Complete LANCZOS Algorithm running]")
     k = len(dataloader)
+    device = next(net.parameters()).data.device
+    
     for i, batch in enumerate(dataloader):
-        device = model.fc.weight.data.device
         v_ = v.to(device)
-        w = w.to(device) 
-        x, y = batch
-        x, y = x.to(device), y.to(device)
-        batch = x, y
+        w = w.to(device)
+        batch = map(lambda x:x.to(device), batch)
         w += hessian_matmul(model, loss_function, v_, batch) / k
     
     v = v.to(w.device)
@@ -31,7 +49,7 @@ def lanczos(model, loss_function, dataloader, m, buffer=2):
     V = [v]
     beta = []
 
-    for i in range(1, m):
+    for i in tqdm.tqdm(range(1, m)):
         b = torch.norm(w)
         beta.append(b)
         if b > 0:
@@ -64,14 +82,10 @@ def lanczos(model, loss_function, dataloader, m, buffer=2):
             V[-buffer - 1] = V[-buffer - 1].cpu()
 
         w = torch.zeros_like(v)
-        print("[LANCZOS iter %d] batch" % i)
         for j, batch in enumerate(dataloader):
-            device = model.fc.weight.data.device
             v_ = v.to(device)
-            w = w.to(device) 
-            x, y = batch
-            x, y = x.to(device), y.to(device)
-            batch = x, y
+            w = w.to(device)
+            batch = map(lambda x:x.to(device), batch)
             w += hessian_matmul(model, loss_function, v_, batch) / k
             
         alpha.append(w.dot(v))
